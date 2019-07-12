@@ -18,7 +18,8 @@ namespace Hylasoft.Opc.Ua
     {
       var name = node.DisplayName.ToString();
       var nodeId = node.NodeId.ToString();
-      return new UaNode(name, nodeId, parent);
+      var nodeClass = node.NodeClass.ToString();
+      return new UaNode(name, nodeId, parent, nodeClass);
     }
   }
 }

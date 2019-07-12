@@ -11,6 +11,7 @@ namespace Hylasoft.Opc.Ua
     /// The UA Id of the node
     /// </summary>
     public string NodeId { get; private set; }
+    public string NodeClass { get; private set; }
 
     /// <summary>
     /// Instantiates a UaNode class
@@ -18,10 +19,12 @@ namespace Hylasoft.Opc.Ua
     /// <param name="name">the name of the node</param>
     /// <param name="nodeId">The UA Id of the node</param>
     /// <param name="parent">The parent node</param>
-    internal UaNode(string name, string nodeId, Node parent = null)
-      : base(name, parent)
+    /// /// <param name="nodeClass">The nodeClass of the node</param>
+    internal UaNode(string name, string nodeId, Node parent = null, string nodeClass=null)
+    : base(name, parent)
     {
       NodeId = nodeId;
+            NodeClass = nodeClass;
     }
 
   }

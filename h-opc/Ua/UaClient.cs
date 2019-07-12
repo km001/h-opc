@@ -171,6 +171,101 @@ namespace Hylasoft.Opc.Ua
       return new ReadValueIdCollection { readValue };
     }
 
+    private ReadValueIdCollection BuildReadValueIdCollectionUnderFolders(string[] folders, uint attributeId, ref List<string> tagList)
+    {
+        ReadValueIdCollection _rtn = new ReadValueIdCollection();
+        foreach (string folder in folders)
+        {
+            List<string> subFolders = new List<string>();
+            var subNodes = ExploreFolder(folder);
+            foreach (UaNode n in subNodes)
+            {
+                if (n.NodeClass==NodeClass.Variable.ToString())
+                {
+                    var readValue = new ReadValueId
+                    {
+                        NodeId = n.NodeId,
+                        AttributeId = attributeId
+                    };
+                    _rtn.Add(readValue);
+                    tagList.Add(n.Tag);
+                }
+                else if (n.NodeClass == NodeClass.Object.ToString())
+                {
+                    subFolders.Add(n.Tag);
+                }
+            }
+            var subResult = BuildReadValueIdCollectionUnderFolders(subFolders.ToArray(), attributeId,ref tagList);
+            _rtn.AddRange(subResult);
+            /*var n = FindNode(tag, RootNode);
+            var readValue = new ReadValueId
+            {
+                NodeId = n.NodeId,
+                AttributeId = attributeId
+            };
+            _rtn.Add(readValue);*/
+            }
+        return _rtn;
+    }
+
+    private ReadValueIdCollection BuildReadValueIdCollection(string[] tags, uint attributeId)
+    {
+        ReadValueIdCollection _rtn = new ReadValueIdCollection();
+        foreach (string tag in tags)
+        {
+            var n = FindNode(tag, RootNode);
+            var readValue = new ReadValueId
+            {
+                NodeId = n.NodeId,
+                AttributeId = attributeId
+            };
+            _rtn.Add(readValue);
+        }
+        return _rtn;
+    }
+
+    /// <summary>
+    /// Read several tags
+    /// </summary>
+    /// <param name="tags">The tags Ids.</param>
+    /// <returns>The value retrieved from the OPC</returns>
+    public DataValueCollection Read(string[] tags)
+    {
+        var nodesToRead = BuildReadValueIdCollection(tags, Attributes.Value);
+        DataValueCollection results;
+        DiagnosticInfoCollection diag;
+        _session.Read(
+            requestHeader: null,
+            maxAge: 0,
+            timestampsToReturn: TimestampsToReturn.Neither,
+            nodesToRead: nodesToRead,
+            results: out results,
+            diagnosticInfos: out diag);
+        return results;
+    }
+
+    /// <summary>
+    /// Read several tags under folders
+    /// </summary>
+    /// <param name="folders">The folders Ids.</param>
+    /// <param name="tagList">Return tags under the folders.</param>
+    /// <returns>The value retrieved from the OPC</returns>
+    public DataValueCollection ReadFolders(string[] folders,out List<string> tagList)
+    {
+        tagList = new List<string>();
+        ReadValueIdCollection nodesToRead = BuildReadValueIdCollectionUnderFolders(folders, Attributes.Value,ref tagList);
+        DataValueCollection results;
+        DiagnosticInfoCollection diag;
+        _session.Read(
+            requestHeader: null,
+            maxAge: 0,
+            timestampsToReturn: TimestampsToReturn.Neither,
+            nodesToRead: nodesToRead,
+            results: out results,
+            diagnosticInfos: out diag);
+        return results;
+    }
+
     /// <summary>
     /// Read a tag
     /// </summary>
@@ -387,8 +482,9 @@ namespace Hylasoft.Opc.Ua
     /// </summary>
     /// <param name="tag">The fully-qualified identifier of the tag. You can specify a subfolder by using a comma delimited name.
     /// E.g: the tag `foo.bar` finds the sub nodes of `bar` on the folder `foo`</param>
+    /// <param name="nodeClass">What kind of nodes you are looking for.If null then find variables and objects.</param>
     /// <returns>The list of sub-nodes</returns>
-    public IEnumerable<UaNode> ExploreFolder(string tag)
+    public IEnumerable<UaNode> ExploreFolder_Specific(string tag,int nodeClass)
     {
       IList<UaNode> nodes;
       _folderCache.TryGetValue(tag, out nodes);
@@ -396,10 +492,10 @@ namespace Hylasoft.Opc.Ua
         return nodes;
 
       var folder = FindNode(tag);
-      nodes = ClientUtils.Browse(_session, folder.NodeId)
+        nodes = ClientUtils.Browse(_session, folder.NodeId)
         .GroupBy(n => n.NodeId) //this is to select distinct
         .Select(n => n.First())
-        .Where(n => n.NodeClass == NodeClass.Variable || n.NodeClass == NodeClass.Object)
+        .Where(n => (int)n.NodeClass == (int)nodeClass)
         .Select(n => n.ToHylaNode(folder))
         .ToList();
 
@@ -411,6 +507,47 @@ namespace Hylasoft.Opc.Ua
 
       return nodes;
     }
+
+        /// <summary>
+        /// Explore a folder on the Opc Server
+        /// </summary>
+        /// <param name="tag">The fully-qualified identifier of the tag. You can specify a subfolder by using a comma delimited name.
+        /// E.g: the tag `foo.bar` finds the sub nodes of `bar` on the folder `foo`</param>
+        /// <returns>The list of sub-nodes</returns>
+        public IEnumerable<UaNode> ExploreFolder(string tag)
+        {
+            IList<UaNode> nodes;
+            _folderCache.TryGetValue(tag, out nodes);
+            if (nodes != null)
+                return nodes;
+
+            var folder = FindNode(tag);
+            nodes = ClientUtils.Browse(_session, folder.NodeId)
+            .GroupBy(n => n.NodeId) //this is to select distinct
+            .Select(n => n.First())
+            .Where(n => n.NodeClass == NodeClass.Variable || n.NodeClass == NodeClass.Object)
+            .Select(n => n.ToHylaNode(folder))
+            .ToList();
+
+            //add nodes to cache
+            if (!_folderCache.ContainsKey(tag))
+                _folderCache.Add(tag, nodes);
+            foreach (var node in nodes)
+                AddNodeToCache(node);
+
+            return nodes;
+        }
+
+        /// <summary>
+        /// Explore a folder on the Opc Server
+        /// </summary>
+        /// <param name="tag">The fully-qualified identifier of the tag. You can specify a subfolder by using a comma delimited name.
+        /// E.g: the tag `foo.bar` finds the sub nodes of `bar` on the folder `foo`</param>
+        /// <returns>The list of sub-nodes</returns>
+        /*public IEnumerable<UaNode> ExploreFolder(string tag)
+        {
+            return ExploreFolder(tag,null);
+        }*/
 
     /// <summary>
     /// Explores a folder asynchronously
@@ -599,9 +736,9 @@ namespace Hylasoft.Opc.Ua
       var folders = tag.Split('.');
       var head = folders.FirstOrDefault();
       UaNode found;
-      try
+            var subNodes = ExploreFolder(node.Tag);
+            try
       {
-        var subNodes = ExploreFolder(node.Tag);
         found = subNodes.Single(n => n.Name == head);
       }
       catch (Exception ex)
