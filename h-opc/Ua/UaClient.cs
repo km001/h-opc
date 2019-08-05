@@ -171,7 +171,7 @@ namespace Hylasoft.Opc.Ua
       return new ReadValueIdCollection { readValue };
     }
 
-    private ReadValueIdCollection BuildReadValueIdCollectionUnderFolders(string[] folders, uint attributeId, ref List<string> tagList)
+    private ReadValueIdCollection BuildReadValueIdCollectionUnderFolders(string[] folders, uint attributeId, ref List<string> tagList, bool needToGoDeeper = false)
     {
         ReadValueIdCollection _rtn = new ReadValueIdCollection();
         foreach (string folder in folders)
@@ -190,7 +190,7 @@ namespace Hylasoft.Opc.Ua
                     _rtn.Add(readValue);
                     tagList.Add(n.Tag);
                 }
-                else if (n.NodeClass == NodeClass.Object.ToString())
+                else if (n.NodeClass == NodeClass.Object.ToString() && needToGoDeeper)
                 {
                     subFolders.Add(n.Tag);
                 }
@@ -244,16 +244,17 @@ namespace Hylasoft.Opc.Ua
         return results;
     }
 
-    /// <summary>
-    /// Read several tags under folders
-    /// </summary>
-    /// <param name="folders">The folders Ids.</param>
-    /// <param name="tagList">Return tags under the folders.</param>
-    /// <returns>The value retrieved from the OPC</returns>
-    public DataValueCollection ReadFolders(string[] folders,out List<string> tagList)
+        /// <summary>
+        /// Read several tags under folders
+        /// </summary>
+        /// <param name="folders">The folders Ids.</param>
+        /// <param name="tagList">Return tags under the folders.</param>
+        /// <param name="needToGoDeeper">Need to go into subfolders or not.</param>
+        /// <returns>The value retrieved from the OPC</returns>
+        public DataValueCollection ReadFolders(string[] folders,out List<string> tagList, bool needToGoDeeper = false)
     {
         tagList = new List<string>();
-        ReadValueIdCollection nodesToRead = BuildReadValueIdCollectionUnderFolders(folders, Attributes.Value,ref tagList);
+        ReadValueIdCollection nodesToRead = BuildReadValueIdCollectionUnderFolders(folders, Attributes.Value,ref tagList, needToGoDeeper);
         DataValueCollection results;
         DiagnosticInfoCollection diag;
         _session.Read(
